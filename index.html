@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IMU 姿态融合：三方案对比与融合设计</title>
+<style>
+:root{
+  --bg:#f6f7fb; --card:#ffffff; --ink:#1b1f2a; --muted:#5b6478;
+  --line:#e2e6ef; --accent:#2e63d8; --accent2:#0e9f6e;
+  --warn:#c2410c; --code:#f2f4f8; --shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px rgba(16,24,40,.05);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}
+header{background:linear-gradient(135deg,#0f1b3d 0%,#1d3a7a 55%,#2e63d8 100%);color:#fff;padding:44px 24px 36px}
+header .wrap{max-width:1120px;margin:0 auto}
+h1{font-size:28px;margin:0 0 10px;letter-spacing:.5px}
+.sub{color:#c9d6f5;font-size:15px;margin:0}
+.meta{color:#9fb2dd;font-size:13px;margin-top:14px}
+nav{position:sticky;top:0;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);z-index:5}
+nav .wrap{max-width:1120px;margin:0 auto;padding:10px 24px;display:flex;gap:18px;flex-wrap:wrap}
+nav a{color:var(--muted);text-decoration:none;font-size:13px}
+nav a:hover{color:var(--accent)}
+main{max-width:1120px;margin:0 auto;padding:28px 24px 80px}
+section{margin:38px 0;scroll-margin-top:72px}
+h2{font-size:21px;margin:0 0 6px;padding-top:8px}
+h2 .no{color:var(--accent);font-weight:800;margin-right:8px}
+.lead{color:var(--muted);margin:0 0 18px}
+h3{font-size:16px;margin:24px 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:18px 20px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+@media(max-width:900px){.grid3{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;
+  background:#e8efff;color:#24479f;margin-right:6px}
+.tag.green{background:#e6f7f0;color:#0b7a55}
+.tag.orange{background:#fff1e8;color:#a34711}
+.tag.gray{background:#eef0f5;color:#4a5468}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);
+  border-radius:10px;overflow:hidden;font-size:13.5px}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+tbody tr:nth-child(even){background:#fafbfe}
+tbody tr:hover{background:#f4f7fe}
+th{background:#f0f3fa;font-weight:650;color:#33405c;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  background:var(--code);padding:1px 5px;border-radius:4px;font-size:12.5px;
+  overflow-wrap:anywhere;word-break:break-word}
+.profiles{display:flex;flex-direction:column;gap:14px}
+.profile{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);
+  border-radius:12px;box-shadow:var(--shadow);padding:18px 22px;
+  display:grid;grid-template-columns:270px 1fr;gap:24px}
+.profile.o{border-left-color:#e07a1f}
+.profile.g{border-left-color:var(--accent2)}
+.p-head h3{margin:6px 0 2px;font-size:18px}
+.p-sub{margin:0;color:var(--muted);font-size:12.5px}
+.p-desc{margin:10px 0 0;font-size:12.5px;color:#4b5568;line-height:1.55}
+.p-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:14px 20px;align-content:start}
+.fact .k{display:block;font-size:10.5px;color:#7a8399;letter-spacing:.7px;margin-bottom:2px}
+.fact .v{display:block;font-size:13.5px;line-height:1.45}
+@media(max-width:900px){.profile{grid-template-columns:1fr;gap:14px}}
+ul{margin:8px 0 0 20px;padding:0}
+li{margin:4px 0}
+.bar{height:9px;border-radius:6px;background:#e8ebf2;overflow:hidden;margin-top:4px}
+.bar>i{display:block;height:100%;border-radius:6px;background:var(--accent)}
+.bar>i.g{background:var(--accent2)}
+.bar>i.o{background:#e07a1f}
+.bar>i.r{background:#c0392b}
+.note{border-left:3px solid var(--accent);background:#eef3ff;padding:10px 14px;border-radius:0 8px 8px 0;
+  color:#25325a;font-size:13.5px;margin:14px 0}
+.warn{border-left:3px solid var(--warn);background:#fff4ec;color:#6b2d0c}
+.diagram{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px;overflow:auto}
+svg{display:block;max-width:100%;height:auto}
+.small{font-size:12.5px;color:var(--muted)}
+footer{max-width:1120px;margin:0 auto;padding:24px;color:var(--muted);font-size:12.5px;
+  border-top:1px solid var(--line)}
+.pill{display:inline-block;padding:3px 9px;border-radius:999px;background:#eef0f5;color:#3c465c;
+  font-size:12px;margin:2px 4px 2px 0}
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:6px 0 8px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);
+  padding:14px 16px}
+.stat b{display:block;font-size:26px;line-height:1.1;letter-spacing:.5px;color:#14224a}
+.stat span{display:block;margin-top:4px;font-size:11.5px;color:var(--muted);line-height:1.35}
+@media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}}
+.codebox{background:#0f172a;border:1px solid #1e2a44;border-radius:12px;overflow:hidden;
+  box-shadow:var(--shadow)}
+.codebox .cap{display:flex;justify-content:space-between;gap:10px;padding:9px 14px;
+  background:#131f38;color:#c7d2e8;font-size:12px;border-bottom:1px solid #1e2a44}
+.codebox .cap span{color:#7f92b8;font-family:ui-monospace,Menlo,monospace}
+.codebox pre{margin:0;padding:14px 16px;overflow:auto;color:#dbe4f5;
+  font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.codebox .k{color:#7dd3fc}
+.codebox .c{color:#7f92b8}
+.codebox .n{color:#f0abfc}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:900px){.split{grid-template-columns:1fr}}
+.evidence{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#3b4a6b;
+  background:#eef3ff;border-radius:5px;padding:1px 6px}
+.callout{background:linear-gradient(135deg,#0f1b3d,#1d3a7a);color:#e8eeff;border-radius:12px;
+  padding:16px 20px;font-size:14px;line-height:1.7;box-shadow:var(--shadow)}
+.callout b{color:#fff}
+
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>IMU 姿态融合：三方案对比与融合设计</h1>
+    <p class="sub">自研 quat-zupt-ekf × x-IMU3（Madgwick） × ATOM-IMU（恒温 + 温态标定）</p>
+    <p class="meta">2026-10-19 ｜ 数据来源：本地源码、固件逆向（REA/Ghidra）、ARM 交叉编译基准 ｜ 面向端侧算力 80 / 170 / 300 / 480–600 MHz</p>
+  </div>
+</header>
+
+<nav><div class="wrap">
+  <a href="#tldr">结论</a>
+  <a href="#profiles">三方案</a>
+  <a href="#diff">异同</a>
+  <a href="#core">内核鉴定</a>
+  <a href="#board">板级证据</a>
+  <a href="#bench">基准数据</a>
+  <a href="#fusion">融合方案</a>
+  <a href="#tiers">算力分档</a>
+  <a href="#flight">与飞控共存</a>
+  <a href="#route">落地路线</a>
+  <a href="#evidence">证据与复现</a>
+</div></nav>
+
+<main>
+
+<div class="stats">
+  <div class="stat"><b>3</b><span>固件 / 实现样本：x-IMU3、ATOM-IMU、自研 EKF7</span></div>
+  <div class="stat"><b>2</b><span>指令集：MIPS32r2 与 Cortex-M4F</span></div>
+  <div class="stat"><b>1,235</b><span>x-IMU3 识别出的函数符号</span></div>
+  <div class="stat"><b>720</b><span>ATOM 固件反编译函数</span></div>
+  <div class="stat"><b>5 × 3</b><span>5 个 C 实现在 3 档 ARM 上交叉编译</span></div>
+</div>
+
+<!-- ============ TL;DR ============ -->
+<section id="tldr">
+  <h2><span class="no">0</span>一页结论</h2>
+  <div class="grid3">
+    <div class="card">
+      <span class="tag">自研</span><strong>quat-zupt-ekf</strong>
+      <p class="small" style="margin:8px 0">7 状态全量 EKF（四元数 + 速度），ZUPT 零速 + 磁航向，
+      自适应 R、三级静止检测、安装矩阵/零偏自标定。功能最完整，成本中高。</p>
+      <p class="small"><strong>擅长：</strong>需要速度/位移、长时间静止（ZUPT）、可观测性设计。</p>
+      <p class="small"><strong>短板：</strong>全量四元数协方差数值稳定性；零偏由静止检测器驱动，
+      匀速旋转会被误判（README 已知局限 1）；无温漂处理。</p>
+    </div>
+    <div class="card">
+      <span class="tag orange">逆向</span><strong>x-IMU3（Madgwick）</strong>
+      <p class="small" style="margin:8px 0">梯度下降 AHRS（400 Hz，β=0.5），初始化窗口估计零偏，
+      加计/磁干扰抑制带恢复触发（−9 步进），超量程恢复、增益斜坡、时间戳 dt。</p>
+      <p class="small"><strong>擅长：</strong>极低算力、鲁棒机制完整、工程细节扎实（商业产品验证）。</p>
+      <p class="small"><strong>短板：</strong>固定增益，无协方差/速度；无法自适应噪声；无温漂处理。</p>
+    </div>
+    <div class="card">
+      <span class="tag green">逆向</span><strong>ATOM-IMU（恒温 + 标定）</strong>
+      <p class="small" style="margin:8px 0">算法仍是 <strong>6 轴 Madgwick</strong>（加计修正、无磁力计）；
+      真正的差别在硬件与流程：加热电阻 + PWM 把 IMU 稳定在目标温度（钳位 10–80°C），
+      温度平均绝对偏差 &lt; 0.13°C 才允许标定，4 姿态静置标定，零漂 &lt;3°/h。</p>
+      <p class="small"><strong>擅长：</strong>从源头消掉温漂；标定流程最严谨。</p>
+      <p class="small"><strong>短板：</strong>功耗/预热/体积；必须有加热硬件；无绝对航向。</p>
+    </div>
+  </div>
+  <div class="note" style="margin-top:18px">
+    <strong>融合结论：</strong>三者的优点不冲突——ATOM 解决“输入误差”（温度/标定），
+    x-IMU3 解决“观测鲁棒性”（门控滞回/恢复/时基），自研 EKF 解决“最优融合与可观测性”。
+    推荐做成 <strong>公共底座 + 三档滤波器</strong>：标定/温控一次做好；
+    80 MHz 用 Madgwick，170 MHz 用 6 状态误差状态 EKF，300 MHz 以上用 9/12 状态 ES-EKF，
+    同一套门控与时间戳机制贯穿三档。
+  </div>
+</section>
+
+<!-- ============ PROFILES ============ -->
+<section id="profiles">
+  <h2><span class="no">1</span>三个方案是什么</h2>
+  <p class="lead">三份实现分别代表三种工程哲学：全量 EKF、极简梯度下降、硬件恒温 + 严格标定。</p>
+
+  <div class="profiles">
+
+    <article class="profile">
+      <div class="p-head">
+        <span class="tag">自研</span>
+        <h3>quat-zupt-ekf</h3>
+        <p class="p-sub">7 状态全量 EKF · ZUPT · 磁航向</p>
+        <p class="p-desc">功能最完整，成本中高。核心价值是速度/位移可观测与不确定性输出。</p>
+      </div>
+      <div class="p-facts">
+        <div class="fact"><span class="k">状态</span><span class="v">q(4) + v<sub>ENU</sub>(3)</span></div>
+        <div class="fact"><span class="k">协方差</span><span class="v">7×7 全量传播</span></div>
+        <div class="fact"><span class="k">观测</span><span class="v">ZUPT 速度伪观测；磁航向 1 维</span></div>
+        <div class="fact"><span class="k">零偏</span><span class="v">静止分窗均值 + 指数平滑</span></div>
+        <div class="fact"><span class="k">初始化</span><span class="v">0.1s → 3s 静置均值 → 粗对准</span></div>
+        <div class="fact"><span class="k">特色</span><span class="v">三级静止检测、自适应 R、安装矩阵自标定</span></div>
+        <div class="fact"><span class="k">输出</span><span class="v">姿态 / 速度 / 短时位移 / 静止标志</span></div>
+        <div class="fact"><span class="k">实现</span><span class="v">Python + C99（默认 double）</span></div>
+        <div class="fact"><span class="k">短板</span><span class="v">匀速旋转误判；无温漂处理</span></div>
+      </div>
+    </article>
+
+    <article class="profile o">
+      <div class="p-head">
+        <span class="tag orange">逆向</span>
+        <h3>x-IMU3（Madgwick）</h3>
+        <p class="p-sub">梯度下降 AHRS · 400 Hz · β = 0.5</p>
+        <p class="p-desc">极低算力，鲁棒机制组合经过商业产品验证。</p>
+      </div>
+      <div class="p-facts">
+        <div class="fact"><span class="k">状态</span><span class="v">四元数 + 引擎状态</span></div>
+        <div class="fact"><span class="k">协方差</span><span class="v">无</span></div>
+        <div class="fact"><span class="k">观测</span><span class="v">加计 + 磁计，每拍参与修正</span></div>
+        <div class="fact"><span class="k">零偏</span><span class="v">初始化窗口均值（设置项可读）</span></div>
+        <div class="fact"><span class="k">鲁棒</span><span class="v">抑制计数器、恢复触发、超量程恢复、增益斜坡</span></div>
+        <div class="fact"><span class="k">时基</span><span class="v">硬件时间戳 dt（±0.3%）</span></div>
+        <div class="fact"><span class="k">输出</span><span class="v">四元数 / 旋转矩阵 / 欧拉角 / 线加速度</span></div>
+        <div class="fact"><span class="k">实现</span><span class="v">PIC32MZ 内联展开（MIPS32r2 + FPU）</span></div>
+        <div class="fact"><span class="k">短板</span><span class="v">固定增益；无速度/协方差；无温漂</span></div>
+      </div>
+    </article>
+
+    <article class="profile g">
+      <div class="p-head">
+        <span class="tag green">逆向</span>
+        <h3>ATOM-IMU（恒温 + 标定）</h3>
+        <p class="p-sub">硬件恒温 + 温态标定 · 零漂 &lt; 3°/h</p>
+        <p class="p-desc">滤波器是 6 轴 Madgwick；产品级差异在温控与标定，而不是姿态算法本身。</p>
+      </div>
+      <div class="p-facts">
+        <div class="fact"><span class="k">姿态算法</span><span class="v">6 轴 Madgwick（加计修正，无磁）</span></div>
+        <div class="fact"><span class="k">状态</span><span class="v">四元数 4 + 陀螺零偏 3</span></div>
+        <div class="fact"><span class="k">初始化</span><span class="v">前 3000 拍 β × 50（增益提升）</span></div>
+        <div class="fact"><span class="k">传感器</span><span class="v">BMI088 + BMI270（双 6 轴，无磁/无高 g）</span></div>
+        <div class="fact"><span class="k">温控</span><span class="v">目标 10–80°C；稳定判据 MAD &lt; 0.13°C</span></div>
+        <div class="fact"><span class="k">标定</span><span class="v">预热 10 min + 4 姿态静置 ≥ 1 min</span></div>
+        <div class="fact"><span class="k">指标</span><span class="v">yaw 零漂 &lt; 10°/h，良好环境 &lt; 3°/h</span></div>
+        <div class="fact"><span class="k">短板</span><span class="v">无绝对航向；功耗 / 预热 / 体积</span></div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- ============ DIFF ============ -->
+<section id="diff">
+  <h2><span class="no">2</span>异同：逐维度对照</h2>
+  <p class="lead">三者共享“预测—修正 + 零偏策略”的骨架，差异集中在估计器、观测组合与误差源处理方式。</p>
+
+  <table>
+    <thead><tr><th style="width:130px">维度</th><th>自研 quat-zupt-ekf</th><th>x-IMU3</th><th>ATOM-IMU</th></tr></thead>
+    <tbody>
+      <tr><td>估计器</td><td>全量 EKF（7 状态协方差传播）</td><td>Madgwick 梯度下降（固定增益 β=0.5）</td><td>6 轴 Madgwick（加计唯一观测）</td></tr>
+      <tr><td>状态维度</td><td>7（q + v）</td><td>4（q）</td><td>4（q）+ 3（零偏）</td></tr>
+      <tr><td>姿态更新</td><td>陀螺角增量右乘 + 每次归一化</td><td>q̇ = ½q⊗ω − βŝ，π/360 合并 ½·deg2rad</td><td>q̇ = ½q⊗ω − βŝ；前 3000 拍 β×50</td></tr>
+      <tr><td>陀螺零偏</td><td>滤波器外：静止分窗均值 + 0.04 平滑</td><td>引擎状态：初始化窗口均值，逐拍扣除</td><td>专用零偏状态（+0xD8）+ 温态标定</td></tr>
+      <tr><td>加计</td><td>仅用于速度积分（+ 粗对准）</td><td><strong>每拍参与姿态修正</strong>，干扰时抑制</td><td><strong>每拍参与修正</strong>（6 轴唯一观测）</td></tr>
+      <tr><td>磁力计</td><td>磁航向 1 维观测，卡方门控</td><td>完整矢量参与梯度，抑制 + 锚定航向</td><td><strong>无磁力计</strong>（纯陀螺航向）</td></tr>
+      <tr><td>静止判别</td><td>三级峰峰值检测（误判匀速旋转）</td><td>无静止依赖；用观测创新门控</td><td>温度稳定性判据（0.13°C）</td></tr>
+      <tr><td>异常抑制</td><td>卡方硬门控（逐拍拒收）</td><td><strong>计数器滞回</strong>：违约 −9、恢复触发重接纳</td><td>加计零值保护；标定入口温度门控</td></tr>
+      <tr><td>初始化</td><td>三段式（0.1/3/4s）</td><td>窗口 + 增益斜坡 + 超量程恢复</td><td>预热至热平衡后标定</td></tr>
+      <tr><td>温漂</td><td>无</td><td>无（仅上报温度）</td><td><strong>硬件恒温 + 温态标定</strong></td></tr>
+      <tr><td>数值特性</td><td>全量四元数协方差，弱于 ES-EKF</td><td>无矩阵，稳定、易定点化</td><td>无矩阵，稳定；与 x-IMU3 同量级</td></tr>
+      <tr><td>算力</td><td>中高（7×7 矩阵）</td><td><strong>极低</strong>（约 460 cycles/update @M4F）</td><td>低（Madgwick 同量级）；温控 10 Hz 可忽略</td></tr>
+      <tr><td>最适合</td><td>静止/慢动、需要速度与协方差</td><td>全场景兜底、低算力、强鲁棒</td><td>高精度、无磁环境、有线/工业</td></tr>
+    </tbody>
+  </table>
+
+  <div class="grid2" style="margin-top:18px">
+    <div class="card">
+      <h3 style="margin-top:0">共同点（可以互相印证的部分）</h3>
+      <ul>
+        <li><strong>预测—修正结构</strong>：陀螺积分做预测，加计/磁计做修正，零偏单独处理。</li>
+        <li><strong>都需要“静止窗口”</strong>：自研用于零偏/对准，x-IMU3 用于初始化，ATOM 用于温度稳定与标定。</li>
+        <li><strong>都要处理磁干扰与线加速度</strong>：自研用卡方门控，x-IMU3 用抑制计数器，ATOM 用温态标定降低系统误差。</li>
+        <li><strong>都依赖归一化</strong>：四元数/重力/磁场矢量归一化是数值稳定的前提。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">本质差异（决定选型的三点）</h3>
+      <ul>
+        <li><strong>误差怎么被“看见”</strong>：EKF 用协方差与创新（可自适应）；Madgwick 用固定增益（简单但不自适应）；ATOM 也是 Madgwick，但只做六轴、并把误差源（温度）拿掉。</li>
+        <li><strong>零偏由谁负责</strong>：自研=滤波器外的静止估计（会被匀速旋转污染）；x-IMU3=引擎状态（与静止解耦）；ATOM=生产/使用前标定（最准但一次性）。</li>
+        <li><strong>算力换什么</strong>：EKF 用矩阵运算换可观测性与不确定性；Madgwick 用极低算力换鲁棒；ATOM 用硬件功耗换热稳定性。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CORE IDENTIFICATION ============ -->
+<section id="core">
+  <h2><span class="no">3</span>算法内核鉴定：两家商业产品都选了 Madgwick</h2>
+  <p class="lead">我们从两颗完全不同的芯片里定位到姿态更新函数，并完成了反编译：
+  x-IMU3 是 PIC32MZ（MIPS32r2），ATOM 是 STM32G431（Cortex-M4F）。结果指向同一个算法内核。</p>
+
+  <div class="split">
+    <div class="codebox">
+      <div class="cap">x-IMU3 · AhrsUpdate <span>0x9D036AC8 · MIPS32r2</span></div>
+<pre><span class="c">; 陀螺积分：π/360 已把 ½ 和 deg→rad 合并</span>
+lwc1   f14, 0x5b7c(t3)      <span class="c">; pi/360</span>
+mul.s  f16, f15, f14        <span class="c">; gx * pi/360</span>
+...
+<span class="c">; 梯度 s 归一化（全函数 5 处 sqrt.s+div.s）</span>
+sqrt.s f31, f29
+div.s  f3,  f18, f31
+...
+<span class="c">; 干扰抑制：违约 -9 步进，恢复触发重接纳</span>
+addiu  v1, t6, -9
+slt    t9, t7, v1
+bnez   t9, ...
+<span class="c">; 初始化窗口：均值 * 1/N → 零偏/初始姿态</span>
+tail   AhrsInitialiseWindow_Step</pre>
+    </div>
+    <div class="codebox">
+      <div class="cap">ATOM-IMU · AhrsUpdate <span>0x08013480 · Cortex-M4F</span></div>
+<pre><span class="c">/* 陀螺零偏每拍扣除 */</span>
+local_b4 -= *(float *)(param_1 + 0xd8);
+local_b0 -= *(float *)(param_1 + 0xdc);
+local_ac -= *(float *)(param_1 + 0xe0);
+
+<span class="c">/* q̇ = ½ q⊗ω */</span>
+fVar15 = (-(fVar20*local_b0) - fVar7*local_b4
+          - local_ac*fVar17) * 0.5;
+
+<span class="c">/* 梯度 s = Jᵀf：4.0/8.0 系数是雅可比展开 */</span>
+fVar19 = fVar22*(fVar20+fVar20) + fVar8*4.0*fVar10
+       + fVar8*4.0*fVar9 + (fVar7+fVar7)*fVar13;
+...
+<span class="c">/* 前 3000 拍 β × 50 */</span>
+if (uVar1 &lt; 3000)
+    fVar22 = fVar22 * DAT_080138c0;  <span class="c">/* 50.0f */</span></pre>
+    </div>
+  </div>
+
+  <h3>鉴定依据</h3>
+  <table>
+    <thead><tr><th>算法特征</th><th>x-IMU3</th><th>ATOM-IMU</th></tr></thead>
+    <tbody>
+      <tr><td>四元数微分</td><td>½ q⊗ω（π/360 合并系数）</td><td>½ q⊗ω（0.5 显式）</td></tr>
+      <tr><td>观测</td><td>加计 + 磁（9 轴）</td><td>仅加计（6 轴）</td></tr>
+      <tr><td>修正方式</td><td>梯度 s=Jᵀf，归一化后乘 β</td><td>同一结构，β 前 3000 拍 ×50</td></tr>
+      <tr><td>归一化</td><td>加计/磁/梯度/四元数共 5 处 sqrt</td><td>加计/梯度/四元数共 2–3 处</td></tr>
+      <tr><td>零偏</td><td>初始化窗口均值 + 引擎状态</td><td>专用状态（+0xD8..+0xE0）+ 温态标定</td></tr>
+      <tr><td>结论</td><td><strong>Madgwick 9 轴</strong></td><td><strong>Madgwick 6 轴</strong></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout" style="margin-top:16px">
+    <b>这说明什么：</b>算法内核本身不是壁垒——两家商业产品都用了同一个 Madgwick 梯度下降。
+    真正的差距在<b>观测质量与工程细节</b>：x-io 用磁提供绝对航向、用门控滞回保护观测；
+    ATOM 去掉磁、把温度锁死，用更稳的零偏换航向。选型时抄“算法”不如抄“误差预算的分配”。
+  </div>
+</section>
+
+<!-- ============ BOARD EVIDENCE ============ -->
+<section id="board">
+  <h2><span class="no">4</span>板级证据：器件与布局也在为误差预算服务</h2>
+  <p class="lead">两家的板子走了相反路线。x-IMU3 是“传感器种类齐全 + 磁绝对航向”，
+  ATOM 是“双 IMU + 恒温、没有磁和高 g”。器件型号由电气规格、封装与固件交叉推断（CAD 无丝印）。</p>
+
+  <div class="split">
+    <div class="card">
+      <h3 style="margin-top:0">x-IMU3：三颗传感器分立</h3>
+      <ul>
+        <li><strong>主 IMU</strong>：±24g / ±2000dps / 0.014°/s/√Hz → <strong>Bosch BMI088</strong>（高置信）</li>
+        <li><strong>磁力计</strong>：±1300µT(XY) / ±2500µT(Z) → <strong>Bosch BMM150</strong>（很高置信）</li>
+        <li><strong>高 g</strong>：±200g / 5 mg/√Hz / 1600Hz → <strong>ADI ADXL375</strong>（中高置信）</li>
+        <li>温度传感器为独立器件（量程 −104~150°C，三颗 MEMS 都达不到）</li>
+      </ul>
+      <p class="small">CAD 布局：磁力计在板角、远离 USB/电源；高 g 靠近板边与安装孔；
+      主 IMU 避开板边应力区。三种传感器各自独立标定（15 参数）。</p>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">ATOM-IMU：双 6 轴 + 单一加热区</h3>
+      <ul>
+        <li><strong>BMI088 + BMI270</strong>（固件字符串中仅见这两个传感器驱动）</li>
+        <li><strong>没有磁力计</strong>：航向靠陀螺积分，零漂只能靠零偏稳定性</li>
+        <li><strong>没有高 g</strong>：定位是精密姿态，不是冲击记录</li>
+        <li>板上有黄色功率电阻（加热）与 <strong>220µF/16V</strong> 电解电容（加热脉冲储能）</li>
+        <li>两颗 IMU 共享一个热区，命令层同步目标温度</li>
+      </ul>
+      <p class="small">这解释了它的工程取舍：既然没有磁来兜底航向，就必须把温度与零偏做到极致——
+      恒温 45°C + 0.13°C 稳定判据 + 温态标定。</p>
+    </div>
+  </div>
+
+  <div class="note" style="margin-top:16px">
+    <strong>实板一锤定音：</strong>读 WHO_AM_I 即可确认——BMI088 加速度计 0x1E、陀螺 0x0F；
+    BMM150 0x50；ADXL375 DEVID 0xE5。
+  </div>
+</section>
+
+<!-- ============ BENCH ============ -->
+<section id="bench">
+  <h2><span class="no">5</span>基准数据：算力、代码、周期</h2>
+  <p class="lead">主机计时只用于相对比较；Cortex-M 的周期数是按 ARM 指令级计数与 CPI 假设估算（详见文末方法）。</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3 style="margin-top:0">主机相对耗时（ns/update，min of 7）</h3>
+      <table>
+        <thead><tr><th>实现</th><th class="num">ekf7=double</th><th class="num">ekf7=float</th></tr></thead>
+        <tbody>
+          <tr><td>Madgwick</td><td class="num">32.9</td><td class="num">33.8</td></tr>
+          <tr><td>ES-EKF 6 状态</td><td class="num">277.5</td><td class="num">285.5</td></tr>
+          <tr><td>ekf7（7 状态）</td><td class="num">122.9</td><td class="num">109.4</td></tr>
+          <tr><td>ATOM 温控（一拍）</td><td class="num">22.9</td><td class="num">25.1</td></tr>
+        </tbody>
+      </table>
+      <p class="small">x86 会把矩阵循环 SIMD 化，因此主机上 EKF 看起来不贵；ARM 上标量执行时矩阵成本会显著放大。</p>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">ARM 代码尺寸（.text，字节）</h3>
+      <table>
+        <thead><tr><th>实现</th><th class="num">M0+</th><th class="num">M4F</th><th class="num">M7</th></tr></thead>
+        <tbody>
+          <tr><td>Madgwick</td><td class="num">2,456</td><td class="num">1,164</td><td class="num">1,128</td></tr>
+          <tr><td>ES-EKF 6 状态</td><td class="num">3,672</td><td class="num">2,880</td><td class="num">2,876</td></tr>
+          <tr><td>ekf7（double）</td><td class="num">18,472</td><td class="num">18,996</td><td class="num">13,428</td></tr>
+          <tr><td>ekf7（float）</td><td class="num">—</td><td class="num">13,348</td><td class="num">—</td></tr>
+          <tr><td>ATOM 温控</td><td class="num">2,876</td><td class="num">2,672</td><td class="num">2,304</td></tr>
+        </tbody>
+      </table>
+      <p class="small">ekf7 double 版在 M4F 目标中引用 <code>__aeabi_d*</code> 792 处（float 版 168 处）——
+      M4F 没有双精度 FPU，double 运算全部走软件库，这是它在 170 MHz 档的主要隐患。</p>
+    </div>
+  </div>
+
+  <h3>400 Hz 姿态更新的 CPU 占用（估算）</h3>
+  <div class="card">
+    <table>
+      <thead><tr><th>实现</th><th class="num">M0+ @80MHz</th><th class="num">M4F @170MHz</th><th class="num">M7 @480MHz</th></tr></thead>
+      <tbody>
+        <tr><td>Madgwick <span class="tag green">推荐低档</span></td>
+          <td class="num">2.8%<div class="bar"><i class="g" style="width:2.8%"></i></div></td>
+          <td class="num">0.11%<div class="bar"><i class="g" style="width:2%"></i></div></td>
+          <td class="num">0.03%<div class="bar"><i class="g" style="width:1%"></i></div></td></tr>
+        <tr><td>ES-EKF 6 状态 <span class="tag">推荐中档</span></td>
+          <td class="num">125%<div class="bar"><i class="r" style="width:100%"></i></div></td>
+          <td class="num">5.1%<div class="bar"><i style="width:5.1%"></i></div></td>
+          <td class="num">1.2%<div class="bar"><i style="width:1.2%"></i></div></td></tr>
+        <tr><td>ekf7（float）</td>
+          <td class="num">55%<div class="bar"><i class="o" style="width:55%"></i></div></td>
+          <td class="num">2.1%<div class="bar"><i style="width:2.1%"></i></div></td>
+          <td class="num">0.5%<div class="bar"><i style="width:.5%"></i></div></td></tr>
+        <tr><td>ekf7（double）</td>
+          <td class="num">215%<div class="bar"><i class="r" style="width:100%"></i></div></td>
+          <td class="num">8.5%<div class="bar"><i class="o" style="width:8.5%"></i></div></td>
+          <td class="num">0.75%<div class="bar"><i style="width:.75%"></i></div></td></tr>
+      </tbody>
+    </table>
+    <p class="small" style="margin-bottom:0">前提：400 Hz、单核、无其它负载。周期估算：Madgwick ≈460、ES-EKF6 ≈21.5k、ekf7 float ≈9k、ekf7 double ≈36k（M4F）；M7 约 ÷1.5；M0+ 软浮点 ×12。</p>
+  </div>
+</section>
+
+<!-- ============ FUSION ============ -->
+<section id="fusion">
+  <h2><span class="no">6</span>融合方案：公共底座 + 分档滤波器</h2>
+  <p class="lead">把“误差源治理”（ATOM）、“观测鲁棒性”（x-IMU3）与“最优估计”（自研 EKF）拆成三层，按算力选姿态层。</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 1080 430" role="img" aria-label="融合架构图">
+      <defs>
+        <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#7f8aa3"/>
+        </marker>
+        <style>
+          .bx{fill:#fff;stroke:#d7dcea;stroke-width:1.2;rx:10}
+          .bxa{fill:#eef3ff;stroke:#2e63d8;stroke-width:1.4;rx:10}
+          .bxg{fill:#e9f8f1;stroke:#0e9f6e;stroke-width:1.4;rx:10}
+          .bxo{fill:#fff3ea;stroke:#d97706;stroke-width:1.4;rx:10}
+          .t{font:13px -apple-system,"PingFang SC",sans-serif;fill:#1b1f2a}
+          .ts{font:11.5px -apple-system,"PingFang SC",sans-serif;fill:#5b6478}
+          .tt{font:600 13.5px -apple-system,"PingFang SC",sans-serif;fill:#1b1f2a}
+          .ln{stroke:#7f8aa3;stroke-width:1.3;fill:none;marker-end:url(#a)}
+        </style>
+      </defs>
+
+      <text x="24" y="28" class="tt">公共底座（设备级，一次做好）</text>
+      <rect x="20" y="40" width="250" height="92" class="bxo"/>
+      <text x="36" y="64" class="tt">① 多姿态标定（ATOM）</text>
+      <text x="36" y="84" class="ts">12 参数加计 + 陀螺零偏</text>
+      <text x="36" y="102" class="ts">4~6 姿态、静置 ≥1 min</text>
+      <text x="36" y="120" class="ts">残差 &lt; 1e-4 才接受</text>
+
+      <rect x="290" y="40" width="250" height="92" class="bxg"/>
+      <text x="306" y="64" class="tt">② 温度稳定门控（ATOM）</text>
+      <text x="306" y="84" class="ts">MAD &lt; 0.13°C 才允许标定</text>
+      <text x="306" y="102" class="ts">加热 PI / 目标 10–80°C</text>
+      <text x="306" y="120" class="ts">标定温度 = 工作温度</text>
+
+      <rect x="560" y="40" width="240" height="92" class="bxa"/>
+      <text x="576" y="64" class="tt">③ 初始化窗口（x-IMU3）</text>
+      <text x="576" y="84" class="ts">N 样本均值 → 零偏/初始姿态</text>
+      <text x="576" y="102" class="ts">增益斜坡 + 超量程恢复</text>
+      <text x="576" y="120" class="ts">时间戳 dt（±0.3% 时基）</text>
+
+      <rect x="820" y="40" width="240" height="92" class="bx"/>
+      <text x="836" y="64" class="tt">④ 温补模型（P7，可选）</text>
+      <text x="836" y="84" class="ts">b(T)=b0+k(T−Tref)</text>
+      <text x="836" y="102" class="ts">无烤箱时的软件替代</text>
+      <text x="836" y="120" class="ts">有烤箱时补残差</text>
+
+      <path d="M270 86 L286 86" class="ln"/>
+      <path d="M540 86 L556 86" class="ln"/>
+
+      <text x="24" y="186" class="tt">姿态层（按算力三档，接口一致）</text>
+
+      <rect x="20" y="200" width="330" height="120" class="bxg"/>
+      <text x="36" y="224" class="tt">Tier 0 · Madgwick（80 MHz）</text>
+      <text x="36" y="244" class="ts">9 轴梯度下降 + 抑制计数器</text>
+      <text x="36" y="262" class="ts">4 状态，无矩阵；可定点化</text>
+      <text x="36" y="280" class="ts">400 Hz，≈3% @80 MHz</text>
+      <text x="36" y="298" class="ts">输出：四元数/欧拉角</text>
+
+      <rect x="370" y="200" width="330" height="120" class="bxa"/>
+      <text x="386" y="224" class="tt">Tier 1 · ES-EKF 6（170 MHz）</text>
+      <text x="386" y="244" class="ts">δθ + δb；重力/磁矢量观测</text>
+      <text x="386" y="262" class="ts">NIS 门控 + 恢复触发</text>
+      <text x="386" y="280" class="ts">400 Hz，≈5% @170 MHz</text>
+      <text x="386" y="298" class="ts">可选 ZUPT（速度/位移）</text>
+
+      <rect x="720" y="200" width="340" height="120" class="bx"/>
+      <text x="736" y="224" class="tt">Tier 2 · ES-EKF 9/12（300+ MHz）</text>
+      <text x="736" y="244" class="ts">δθ + δv + δb (+ δk 温漂斜率)</text>
+      <text x="736" y="262" class="ts">ZUPT + 磁航向 + NIS/滞回</text>
+      <text x="736" y="280" class="ts">400–1000 Hz，≈1–3% @480 MHz</text>
+      <text x="736" y="298" class="ts">输出：姿态/速度/协方差</text>
+
+      <path d="M185 132 L185 196" class="ln"/>
+      <path d="M535 132 L535 196" class="ln"/>
+      <path d="M890 132 L890 196" class="ln"/>
+
+      <rect x="20" y="356" width="1040" height="48" class="bx"/>
+      <text x="36" y="374" class="tt">输出与调度层</text>
+      <text x="180" y="371" class="ts">姿态/角速度 → 飞控（高优先级） ｜ 速度/协方差 → 导航 ｜ 温度/零偏 → 监控与日志</text>
+      <text x="180" y="389" class="ts">AHRS 400 Hz ｜ 温控 10 Hz ｜ 标定仅在维护模式触发</text>
+    </svg>
+  </div>
+
+  <h3>机制来源与去留</h3>
+  <table>
+    <thead><tr><th style="width:260px">机制</th><th>来源</th><th>放进哪一层</th><th>代价</th></tr></thead>
+    <tbody>
+      <tr><td>12 参数多姿态标定 + 残差门限</td><td>ATOM</td><td>公共底座 ①</td><td>产线/维护一次，运行零成本</td></tr>
+      <tr><td>温度稳定判据（MAD &lt; 0.13°C）+ 加热 PI</td><td>ATOM</td><td>公共底座 ②</td><td>有加热硬件时；10 Hz 控制可忽略</td></tr>
+      <tr><td>初始化窗口均值 → 零偏/初始姿态</td><td>x-IMU3</td><td>公共底座 ③</td><td>~N 个样本的均值，运行一次性</td></tr>
+      <tr><td>时间戳 dt、超量程恢复、增益斜坡</td><td>x-IMU3</td><td>公共底座 ③</td><td>几乎零成本，强烈建议保留</td></tr>
+      <tr><td>观测抑制计数器（违约 −9 + 恢复触发）</td><td>x-IMU3</td><td>姿态层（三档共用）</td><td>几十字节状态</td></tr>
+      <tr><td>重力/磁矢量观测 + NIS 门控</td><td>本方案（ES-EKF）</td><td>Tier 1/2</td><td>矩阵运算（见分档）</td></tr>
+      <tr><td>ZUPT + 自适应 R</td><td>自研</td><td>Tier 1/2 可选</td><td>3×3 更新，成本低</td></tr>
+      <tr><td>零偏进状态（δb）</td><td>自研 + ES-EKF</td><td>Tier 1/2</td><td>6×6 / 9×9 协方差</td></tr>
+      <tr><td>温漂斜率状态 δk（P7）</td><td>本方案</td><td>Tier 2，或 Tier 1 可选</td><td>3 个额外状态</td></tr>
+      <tr><td>安装矩阵自标定（在线）</td><td>自研</td><td>公共底座 ① 的补充</td><td>一次性</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ TIERS ============ -->
+<section id="tiers">
+  <h2><span class="no">7</span>按端侧算力分档的取舍</h2>
+  <p class="lead">除姿态解算外还要跑飞控，所以关键不是“能不能跑”，而是“留多少余量”。以下按 400 Hz 姿态更新估算。</p>
+
+  <div class="grid2">
+    <div class="card">
+      <span class="tag gray">80 MHz 档</span><strong>M0+ / M3（无 FPU）</strong>
+      <ul>
+        <li><strong>选型：</strong>Madgwick（9 轴或 6 轴），400 Hz；定点化可选。</li>
+        <li><strong>预算：</strong>AHRS ≈3%，飞控 1–2 kHz ≈10–20%，其余留给通信/日志。</li>
+        <li><strong>不要做：</strong>任何 6×6 以上矩阵 EKF（软浮点会吃掉 50%+）。</li>
+        <li><strong>补偿：</strong>用初始化窗口 + 缓慢零偏 EMA；磁干扰用计数门控。</li>
+      </ul>
+      <p class="small"><strong>结论：</strong>Madgwick 是唯一现实选择；把省下的算力留给飞控。</p>
+    </div>
+    <div class="card">
+      <span class="tag">170 MHz 档</span><strong>STM32G4 / H5（M4F / M33）</strong>
+      <ul>
+        <li><strong>选型：</strong>ES-EKF 6 状态（δθ+δb），400 Hz，≈5%。</li>
+        <li><strong>预算：</strong>飞控 2–4 kHz ≈5–10%；温控 10 Hz 可忽略。</li>
+        <li><strong>关键：</strong>必须用 <code>float</code>；<code>double</code> 在 M4F 是软件实现（ekf7 当前默认 double，移植时务必改）。</li>
+        <li><strong>可选：</strong>ZUPT（静止场景）、P7 温补（无烤箱时）。</li>
+      </ul>
+      <p class="small"><strong>结论：</strong>这是“姿态质量/算力”最甜的一档，6 状态 ES-EKF 足够。</p>
+    </div>
+    <div class="card">
+      <span class="tag green">280–300 MHz 档</span><strong>STM32H7A3 / H7B3（M7）</strong>
+      <ul>
+        <li><strong>选型：</strong>ES-EKF 9 状态（δθ+δv+δb），400–1000 Hz。</li>
+        <li><strong>预算：</strong>AHRS ≈1–3%；飞控 4–8 kHz 仍有充足余量。</li>
+        <li><strong>可选：</strong>ZUPT + 磁航向联合、P7 温补、在线安装矩阵。</li>
+        <li><strong>注意：</strong>M7 有双精度 FPU，double 可用但仍建议 float 以省周期。</li>
+      </ul>
+      <p class="small"><strong>结论：</strong>可以同时要“精度 + 速度 + 协方差”，为飞控留出大半算力。</p>
+    </div>
+    <div class="card">
+      <span class="tag green">480–600 MHz 档</span><strong>H743 / H723 / H7R（M7）</strong>
+      <ul>
+        <li><strong>选型：</strong>ES-EKF 12 状态（含 δk 温漂斜率），1 kHz AHRS。</li>
+        <li><strong>预算：</strong>AHRS ≈1–2%；飞控 8 kHz + 通信/日志仍轻松。</li>
+        <li><strong>增值：</strong>原始数据高速记录、双 IMU 冗余、在线健康监测。</li>
+        <li><strong>提醒：</strong>更高的主频不会自动带来更高精度——标定与温控仍是上限。</li>
+      </ul>
+      <p class="small"><strong>结论：</strong>算力不再是约束，把预算花在标定、温控与验证上。</p>
+    </div>
+  </div>
+
+  <div class="note warn" style="margin-top:16px">
+    <strong>一个容易踩的坑：</strong>自研 ekf7 的 C 移植默认 <code>typedef double ekf7_real</code>。
+    在 M4F（G4/H5）上 double 是软件浮点，实测/估算成本约为 float 的 3–4 倍，
+    且代码尺寸从 13.3 KB 涨到 19 KB。若目标 ≤170 MHz，先切 float 并重跑差分验证。
+  </div>
+</section>
+
+<!-- ============ FLIGHT ============ -->
+<section id="flight">
+  <h2><span class="no">8</span>与飞控共存的调度建议</h2>
+  <div class="grid2">
+    <div class="card">
+      <h3 style="margin-top:0">推荐速率与优先级</h3>
+      <table>
+        <thead><tr><th>任务</th><th class="num">速率</th><th>优先级</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>飞控内环（PID）</td><td class="num">1–8 kHz</td><td>最高</td><td>硬实时，不可被姿态解算阻塞</td></tr>
+          <tr><td>姿态解算</td><td class="num">400 Hz–1 kHz</td><td>高</td><td>与 IMU 采样同步；可降频到 400 Hz</td></tr>
+          <tr><td>导航/速度（ZUPT）</td><td class="num">100–400 Hz</td><td>中</td><td>可与姿态同拍或抽拍</td></tr>
+          <tr><td>温度控制</td><td class="num">10 Hz</td><td>低</td><td>热时间常数大，10 Hz 足够</td></tr>
+          <tr><td>标定/参数</td><td class="num">维护模式</td><td>最低</td><td>飞行中禁止触发</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">工程要点</h3>
+      <ul>
+        <li><strong>中断/DMA 收数据</strong>：SPI 传感器用 DMA 搬运，解算在主循环或低优先级线程。</li>
+        <li><strong>时间戳 dt</strong>：用硬件时间戳而不是固定 1/fs（x-IMU3 的做法），抗丢包与时钟偏差。</li>
+        <li><strong>分级降频</strong>：CPU 紧张时先降 EKF 到 200 Hz，再降磁观测到 50 Hz；不要降飞控。</li>
+        <li><strong>浮点</strong>：M4F/M33 一律 float；M7 可 double 但无必要。避免在中断里做矩阵运算。</li>
+        <li><strong>内存</strong>：ES-EKF6 的 P 仅 144 B（float）；ekf7 double 的 P 为 392 B，另加状态与栈。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3 style="margin-top:0">预算示例（400 Hz AHRS + 2 kHz 飞控）</h3>
+    <table>
+      <thead><tr><th>平台</th><th class="num">AHRS</th><th class="num">飞控</th><th class="num">温控/其他</th><th class="num">合计</th><th>结论</th></tr></thead>
+      <tbody>
+        <tr><td>M0+ @80 MHz（Madgwick）</td><td class="num">3%</td><td class="num">15%</td><td class="num">2%</td><td class="num">20%</td><td>可行，余量充足</td></tr>
+        <tr><td>M4F @170 MHz（ES-EKF6）</td><td class="num">5%</td><td class="num">10%</td><td class="num">2%</td><td class="num">17%</td><td>可行，推荐</td></tr>
+        <tr><td>M4F @170 MHz（ekf7 double）</td><td class="num">8.5%</td><td class="num">10%</td><td class="num">2%</td><td class="num">20.5%</td><td>可行但不划算，先改 float</td></tr>
+        <tr><td>M7 @480 MHz（ES-EKF9）</td><td class="num">2%</td><td class="num">4%</td><td class="num">2%</td><td class="num">8%</td><td>轻松，可上 1 kHz AHRS</td></tr>
+      </tbody>
+    </table>
+    <p class="small" style="margin-bottom:0">飞控占比按 2 kHz、每拍约 8–10 µs 估算；实际随控制律复杂度变化。</p>
+  </div>
+</section>
+
+<!-- ============ ROUTE ============ -->
+<section id="route">
+  <h2><span class="no">9</span>落地路线（建议顺序）</h2>
+  <div class="card">
+    <ol style="margin:0 0 0 20px;padding:0">
+      <li><strong>先做公共底座</strong>：ATOM 式 12 参数标定 + 温度稳定门控（0.13°C）+ x-IMU3 式初始化窗口。这三件事对三档滤波器都有效，且运行成本近零。</li>
+      <li><strong>Tier 1 原型</strong>：把 <code>fusion-design/bench/esekf6.c</code> 扩成完整实现（补 ZUPT/自适应 R/复位），在 G4/H5 上跑 400 Hz；用自研工程的差分测试方法验证。</li>
+      <li><strong>并入鲁棒机制</strong>：观测抑制计数器（−9/恢复触发）、超量程恢复、时间戳 dt——直接照搬 x-IMU3 的行为。</li>
+      <li><strong>温补</strong>：有加热硬件走 ATOM 恒温；没有则上 P7（b(T)=b0+kΔT），两者可叠加。</li>
+      <li><strong>基准回归</strong>：同一份真实数据跑三档实现，比较姿态误差/零漂/CPU；合成数据只用于机制验证，不替代真机。</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============ EVIDENCE ============ -->
+<section id="evidence">
+  <h2><span class="no">10</span>证据与复现</h2>
+  <div class="grid2">
+    <div class="card">
+      <h3 style="margin-top:0">本地文件</h3>
+      <ul>
+        <li>自研：<code>quat-zupt-ekf/</code>（Python + C99，含差分测试）</li>
+        <li>x-IMU3 逆向：<code>ximu3-re/</code>（报告、伪代码、符号 ELF）；关键地址：AhrsUpdate 0x9D036AC8、初始化窗口 0x9D07BFA4</li>
+        <li>ATOM 逆向：<code>atom-sdk/ATOM_IMU_逆向笔记.md</code>、<code>atom-imu-re/</code>；温控 0x0800F444，阈值 0x0800F5A8=0.13</li>
+        <li>ATOM 姿态算法：<code>atom-imu-re/pseudo/ahrs_madgwick.ghidra.c</code>（逐字反编译）与 <code>ahrs_madgwick.c</code>（注释版）</li>
+        <li>基准：<code>fusion-design/bench/</code>（madgwick.c、esekf6.c、bench_main.c、results.md）</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">复现命令</h3>
+      <pre class="mono" style="white-space:pre-wrap;margin:0">cd fusion-design/bench
+make run        # 主机计时（min of 7）
+make size-m4    # M4F 代码尺寸（size-m7 / size-m0）
+python3 ../../atom-imu-re/tests/diff_test.py</pre>
+      <p class="small" style="margin-bottom:0">周期换算：M4F CPI≈1.3；M7 CPI≈1.0 且双发射；M0+ 软浮点约为 M4F 的 12×。</p>
+    </div>
+  </div>
+
+  <div class="note warn">
+    <strong>方法学与局限：</strong>本页的周期与 CPU 占用是<strong>估算</strong>，不是板上实测；
+    主机计时只用于相对比较（x86 会把矩阵循环 SIMD 化，低估 Cortex-M 标量成本）。
+    ES-EKF6 是基准用原型（重力/磁矢量观测，无 ZUPT/自适应 R），
+    ATOM 的加热控制律未与固件逐行对齐，标定解算未反编译确认。
+    三档方案最终必须用实板数据集回归后再定参。
+  </div>
+</section>
+
+</main>
+<footer>
+  数据与结论来自本地源码、固件静态逆向（未执行目标固件）与 ARM 交叉编译；合成数据仅用于机制验证。
+  文中所有地址均为对应固件版本的 KSEG0/Flash 虚拟地址，换版本需重新定位。
+</footer>
+</body>
+</html>

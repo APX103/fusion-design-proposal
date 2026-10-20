@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# Build artifacts
+build/
+*.o
+*.dSYM/
+01-quat-zupt-ekf/c/ekf7_test
+03-atom-imu/reconstructed/c/atom_thermal_test
+02-ximu3/tools/out/
+
+# OS
+.DS_Store
