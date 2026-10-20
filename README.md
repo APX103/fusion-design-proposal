@@ -43,12 +43,36 @@ imu-fusion-dossier/
 ├── bench/                        HTML 的基准工程（Madgwick / ES-EKF6 / ATOM 温控）
 ├── 01-quat-zupt-ekf/             自研算法（原始实现 + 增强版 P1–P8）
 ├── 02-ximu3/                     x-IMU3 固件逆向（报告 / 反编译 / 伪代码 / 工具 / 固件）
-└── 03-atom-imu/                  ATOM-IMU 逆向（解密 / 恒温 / 6 轴 Madgwick / 重建）
+├── 03-atom-imu/                  ATOM-IMU 逆向（解密 / 恒温 / 6 轴 Madgwick / 重建）
+├── testdata/                     共享 IMU 仿真数据（含真值）+ 统一评测
+├── tests/test_three_way.py       三算法自动化测试（每个子目录独立运行）
+└── run_all.py                    一键：生成数据 → 跑三个算法 → 评测
 ```
 
 每个子目录都有自己的 `README.md`，说明算法、证据、目录结构和复现命令。
 
-## 4. 快速开始
+## 4. 共享测试数据（三个算法同台对比）
+
+`testdata/` 提供 70 s / 200 Hz 的确定性 IMU 数据（含姿态真值、恒定零偏、
+磁干扰段）。三个算法各自有独立运行器，读取同一份 CSV：
+
+```bash
+python3 run_all.py          # 一键跑三个 + 评测
+python3 -m unittest discover -s tests -v   # 自动化测试（独立运行 + 精度阈值）
+```
+
+当前基线（合成数据，t≥22 s 评估）：
+
+| 算法 | roll RMSE | pitch RMSE | yaw RMSE | 干扰段 yaw | 尾段漂移 |
+|---|---:|---:|---:|---:|---:|
+| 01-quat-zupt-ekf | 0.175° | 0.150° | 1.700° | 0.961° | −0.004 °/min |
+| 02-ximu3 | 0.124° | 0.114° | 0.340° | 0.439° | −2.347 °/min |
+| 03-atom-imu | 0.147° | 0.146° | 0.900° | 0.906° | −0.180 °/min |
+
+说明：合成数据的陀螺零偏恒定，03（无磁、6 轴）靠静置均值估得很准，yaw 偏乐观；
+真机的温度漂移会让它退化——这正是恒温/P7 的价值。详见 `testdata/README.md`。
+
+## 5. 快速开始
 
 ```bash
 # 1) HTML 文档：直接用浏览器打开
@@ -80,7 +104,7 @@ make run
 make size-m4    # 另有 size-m7 / size-m0
 ```
 
-## 5. 证据与复现
+## 6. 证据与复现
 
 | 内容 | 位置 |
 |---|---|
@@ -93,14 +117,14 @@ make size-m4    # 另有 size-m7 / size-m0
 | ATOM 恒温/标定算法（Python + C99） | `03-atom-imu/reconstructed/` |
 | 基准原始数据与方法学 | `bench/results.md` |
 
-## 6. 来源与许可
+## 7. 来源与许可
 
 - `01-quat-zupt-ekf/`：用户自有工程，保留其原始 `LICENSE` 与文档。
 - `02-ximu3/`：分析对象为用户提供的 x-io x-IMU3 固件（v2.6.0）；报告与工具为本仓库产出。
 - `03-atom-imu/`：分析对象为公开仓库 `xrobot-org/atom-sdk` 的固件与文档；
   上游 `README.md` 存于 `03-atom-imu/docs/atom-sdk-README.md`。固件解密仅用于自有设备的互操作分析。
 
-## 7. 局限
+## 8. 局限
 
 - 全部结论来自静态分析与合成数据；**未执行目标固件**，周期/CPU 占用为指令级估算。
 - 板级器件型号由规格、封装与固件交叉推断（CAD 无丝印），需实板读 `WHO_AM_I` 确认。

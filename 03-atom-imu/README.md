@@ -81,6 +81,19 @@ Python 与 C99 经过同场景差分验证（状态序列逐拍一致，温度/�
 └── img/                       板级照片（双 IMU、加热电阻、储能电容）
 ```
 
+## 算法重建与共享数据集
+
+`refimpl/madgwick6.py` 是 `FUN_08013480` 的 6 轴 Madgwick 重建（静置均值零偏、
+前 3000 拍 β×50）。运行：
+
+```bash
+python3 run_dataset.py        # 读取 ../testdata/imu_scenario.csv，输出 results/atom.csv
+```
+
+当前基线：roll 0.147° / pitch 0.146° / yaw 0.900°（t≥22 s），干扰段 yaw 0.906°，
+尾段漂移 −0.180 °/min。数据集静置 0–20 s，覆盖 3000 拍（200 Hz 下 15 s）的增益提升期。
+合成数据零偏恒定，零偏估计接近完美，因此 yaw 偏乐观；真机温漂会显著退化。
+
 ## 复现
 
 ```bash

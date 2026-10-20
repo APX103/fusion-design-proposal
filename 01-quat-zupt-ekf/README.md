@@ -57,6 +57,15 @@
 - P7 软件温补：yaw RMS 3.79° → 2.38°，零偏误差 5.26 → 0.12 mrad/s；
 - P8 恒温方案：积分零漂 −34.6 → −0.39 °/min。
 
+## 共享数据集测试
+
+```bash
+python3 run_dataset.py        # 读取 ../testdata/imu_scenario.csv，输出 results/ekf7.csv
+```
+
+当前基线：roll 0.175° / pitch 0.150° / yaw 1.700°（t≥22 s RMSE），
+磁干扰段 yaw 0.961°，尾段漂移 −0.004 °/min。
+
 ## 运行
 
 ```bash

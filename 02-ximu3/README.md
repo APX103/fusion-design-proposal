@@ -65,6 +65,19 @@ x-io Technologies x-IMU3 固件 v2.6.0 的静态逆向：架构、AHRS、零偏�
 └── docs/                      用户手册 v1.11、板级 CAD 图
 ```
 
+## 算法重建与共享数据集
+
+`refimpl/madgwick9.py` 是 `AhrsUpdate` 的 9 轴 Madgwick 重建（含初始化窗口、
+磁方向门控、−9 步进/恢复触发）。运行：
+
+```bash
+python3 run_dataset.py        # 读取 ../testdata/imu_scenario.csv，输出 results/ximu3.csv
+```
+
+当前基线：roll 0.124° / pitch 0.114° / yaw 0.340°（t≥22 s），干扰段 yaw 0.439°。
+注意：Madgwick 推导假设导航系"北 = +x"，数据集是 ENU（北 = +y），运行器输出前
+左乘 +90° yaw 统一到 ENU；这是重建实现的对齐处理，不代表固件轴序。
+
 ## 复现
 
 ```bash

@@ -12,5 +12,9 @@ build/
 03-atom-imu/reconstructed/c/atom_thermal_test
 02-ximu3/tools/out/
 
+# Generated test outputs
+*/results/
+testdata/results_summary.csv
+
 # OS
 .DS_Store
