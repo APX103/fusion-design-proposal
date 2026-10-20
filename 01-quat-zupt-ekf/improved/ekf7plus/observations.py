@@ -88,6 +88,12 @@ class Observers:
         nu = math.atan2(mE, mN) - declination
         nu = (nu + math.pi) % (2.0 * math.pi) - math.pi
 
+        # 绝对角度门控（x-IMU3 的 10° 阈值语义）：磁干扰是偏置而非噪声，
+        # 只靠 NIS 会把 40° 的方向突变当成 2.8σ 噪声放行。
+        if abs(nu) > math.radians(self.p.mag_abs_gate_deg):
+            self.gate_hdg.streak += self.p.reject_step
+            return "rejected"
+
         H = np.zeros((1, ekf.n))
         neg = -(R @ skew(m_body))          # δm = −R[m×]δθ
         H[0, 0:3] = (-mN * neg[0, :] + mE * neg[1, :]) / h2

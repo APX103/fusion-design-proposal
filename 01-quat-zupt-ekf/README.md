@@ -60,11 +60,19 @@
 ## 共享数据集测试
 
 ```bash
-python3 run_dataset.py        # 读取 ../testdata/imu_scenario.csv，输出 results/ekf7.csv
+python3 run_dataset.py       # 原始 7 状态 EKF -> results/ekf7.csv
+python3 run_dataset_plus.py  # 增强版 (P1–P6)    -> results/ekf7plus.csv
 ```
 
-当前基线：roll 0.175° / pitch 0.150° / yaw 1.700°（t≥22 s RMSE），
-磁干扰段 yaw 0.961°，尾段漂移 −0.004 °/min。
+当前基线（t≥22 s RMSE，同一份 `testdata/imu_scenario.csv`）：
+
+| 实现 | roll | pitch | yaw | 干扰段 yaw | 尾段漂移 |
+|---|---:|---:|---:|---:|---:|
+| 原始 7 状态 EKF | 0.175° | 0.150° | 1.700° | 0.961° | −0.005 °/min |
+| 增强版（ES-EKF + 重力观测 + 门控滞回） | 0.172° | 0.149° | 1.005° | 1.252° | 0.274 °/min |
+
+增强版补了**绝对航向门控**（15°，x-IMU3 为 10°）——没有它时，40° 的磁方向突变
+会被 NIS 当成 2.8σ 噪声放行，yaw 会发散到 12.6°。
 
 ## 运行
 

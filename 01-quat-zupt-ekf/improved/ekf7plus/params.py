@@ -26,6 +26,7 @@ class Params:
         # 门控
         self.nis_chi2_grav = 11.35        # P3/P4：χ²(3, 0.99)
         self.nis_chi2_hdg = 6.63          # χ²(1, 0.99) × ekf7 mag_hdg_gate≈5 的折中
+        self.mag_abs_gate_deg = 15.0      # 绝对航向门控（x-IMU3 为 10°；留 5° 余量）
         self.reject_step = 9              # P4：违约步进 −9（x-IMU3 0x9D036FD0 字面值）
         self.recovery_trigger = 18        # P4：恢复触发（×2 滞回）
         self.acc_norm_gate = 0.15         # P3：|‖f‖-g|/g 自适应前置检查
